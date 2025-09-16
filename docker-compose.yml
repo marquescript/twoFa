@@ -1,0 +1,15 @@
+
+services:
+  pgsql:
+    image: bitnami/postgresql:latest
+    ports:
+      - "5435:5432"
+    environment:
+      - POSTGRES_USER=docker
+      - POSTGRES_PASSWORD=docker
+      - POSTGRES_DB=two_fa
+    volumes:
+      - pgsql_data:/var/lib/postgresql/data
+
+volumes:
+  pgsql_data:
