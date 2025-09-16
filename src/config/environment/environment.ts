@@ -1,6 +1,14 @@
-import { IsNotEmpty, IsString } from "class-validator";
+import { IsEnum, IsNotEmpty, IsString } from "class-validator";
 
 export class Environment {
+
+    @IsString()
+    @IsNotEmpty()
+    @IsEnum({
+        values: ["development", "production"],
+        default: "development"
+    })
+    NODE_ENV: "development" | "production"
 
     @IsString()
     @IsNotEmpty()
