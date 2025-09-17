@@ -1,9 +1,7 @@
-import { IsEnum, IsNotEmpty, IsString } from "class-validator";
+import { IsEnum, IsNotEmpty, IsNumber, IsString } from "class-validator";
 
 export class Environment {
 
-    @IsString()
-    @IsNotEmpty()
     @IsEnum({
         values: ["development", "production"],
         default: "development"
@@ -21,5 +19,9 @@ export class Environment {
     @IsString()
     @IsNotEmpty()
     JWT_PUBLIC_KEY: string
+
+    @IsNumber()
+    @IsNotEmpty()
+    PORT: number
 
 }
