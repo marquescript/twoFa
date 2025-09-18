@@ -1,98 +1,96 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Robust NestJS Authentication API with 2FA
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+## About The Project
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+This project provides a secure, robust, and feature-complete backend service for user authentication and authorization, built with NestJS and Prisma. It goes beyond simple login/password mechanisms by implementing a full lifecycle for Time-Based One-Time Password (TOTP) Two-Factor Authentication (2FA), including secure setup, verification, and account recovery via backup codes.
 
-## Description
+The primary goal is to offer a production-ready foundation for any application requiring a high level of security.
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+## Key Features
 
-## Project setup
+This API includes a comprehensive set of features for modern authentication:
 
-```bash
-$ pnpm install
+### User Authentication
+- Secure user registration and password validation using bcryptjs
+
+### JWT-Based Authorization
+- Implements Access Tokens and Refresh Tokens using the RS256 algorithm
+- Refresh tokens are securely handled via HttpOnly cookies
+
+### Complete 2FA Lifecycle
+- **Secure Enablement**: A QR code-based setup flow using otplib
+- **Critical Confirmation Step**: A mandatory confirmation step prevents users from locking themselves out of their accounts
+- **Encrypted Secret Storage**: 2FA secrets are encrypted (AES-256) at rest, never stored as plaintext
+- **2FA Verification**: Logic to validate TOTP tokens during login
+
+### Account Recovery Mechanism
+- **Backup Code Generation**: Automatically generates a list of single-use backup codes upon successful 2FA confirmation
+- **Secure Backup Code Storage**: Backup codes are hashed using bcryptjs before being stored
+- **Login with Backup Code**: Allows users who have lost their authenticator device to regain access
+
+### Clear API Communication
+- Uses custom error codes (e.g., 2FA_REQUIRED) to provide unambiguous responses to the client, enabling a better user experience
+
+## Tech Stack
+
+- **Backend Framework**: NestJS
+- **ORM**: Prisma
+- **Database**: PostgreSQL
+- **Language**: TypeScript
+- **Authentication**: jsonwebtoken, bcryptjs
+- **Two-Factor Authentication**: otplib, qrcode
+
+## Running with Docker
+
+### Prerequisites
+- **Docker** and **Docker Compose** installed
+
+### Quick start
+1. Clone the repository
+   ```bash
+   git clone <REPOSITORY_URL>
+   cd twoFa
+   ```
+2. Create a `.env` file at the project root (example below)
+3. Start the services with Docker
+   ```bash
+   docker compose up -d --build
+   ```
+4. Run database migrations inside the app container
+   ```bash
+   docker compose exec app npx prisma migrate deploy
+   # Dev alternative (push schema without creating migration files):
+   docker compose exec app npx prisma db push
+   ```
+5. The API will be available at `http://localhost:<PORT>` (see the `PORT` variable in `.env`)
+
+### .env file (example)
+```env
+# Environment
+NODE_ENV=development
+PORT=3000
+
+# Database (uses the docker-compose `pgsql` service)
+DATABASE_URL=postgresql://docker:docker@pgsql:5432/two_fa?schema=public
+
+# JWT (PEM keys). Generate with OpenSSL, for example:
+# openssl genrsa -out jwtRS256.key 2048
+# openssl rsa -in jwtRS256.key -pubout -out jwtRS256.key.pub
+# Tip: you can encode newlines as \n if keeping on one line
+JWT_PRIVATE_KEY=-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----
+JWT_PUBLIC_KEY=-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----
+
+# 2FA
+TWOFA_APP_NAME=TwoFA Demo
+
+# Encryption key (32 bytes for AES-256). Generate with:
+# openssl rand -base64 32 | head -c 32
+# or: openssl rand -hex 32
+ENCRYPTION_KEY=your-32-byte-key-here
 ```
 
-## Compile and run the project
-
-```bash
-# development
-$ pnpm run start
-
-# watch mode
-$ pnpm run start:dev
-
-# production mode
-$ pnpm run start:prod
-```
-
-## Run tests
-
-```bash
-# unit tests
-$ pnpm run test
-
-# e2e tests
-$ pnpm run test:e2e
-
-# test coverage
-$ pnpm run test:cov
-```
-
-## Deployment
-
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
-```bash
-$ pnpm install -g @nestjs/mau
-$ mau deploy
-```
-
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+### Notes
+- `docker-compose.yml` brings up two services: `app` (NestJS) and `pgsql` (PostgreSQL).
+- `app` ports are defined by `PORT` in `.env` and mapped to the host.
+- The database container exposes `5435` on the host for convenience, but the app connects to `pgsql:5432` inside the Docker network.
+- The image bundles `prisma/schema.prisma`, so Prisma CLI commands (migrate/db push) run inside the container without extra flags.
