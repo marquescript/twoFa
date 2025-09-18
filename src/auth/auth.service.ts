@@ -6,6 +6,11 @@ import User from "./user.model";
 import { JwtService } from "./jwt.service";
 import { EnvironmentService } from "src/config/environment/environment.service";
 import { LoginDto } from "./dto/login.dto";
+import * as otplib from "otplib";
+import * as qrcode from "qrcode";
+import { decrypt, encrypt } from "./utils/crypto";
+import { TwoFaAuthRequiredException } from "./exceptions/two-fa-auth-required";
+import * as crypto from 'crypto';
 
 @Injectable()
 export class AuthService {
@@ -52,7 +57,7 @@ export class AuthService {
         accessToken: string, 
         refreshToken: string 
     }> {
-        const { email, password } = input
+        const { email, password, twoFaToken, backupCode } = input
 
         const user = await this.authRepository.findUserByEmail(email)
 
@@ -60,6 +65,24 @@ export class AuthService {
             throw new UnauthorizedException('Invalid credentials')
         }
 
+        if(user.twoFaEnabled) {
+            let isSecondFactorValid = false
+
+            if(backupCode) {
+                isSecondFactorValid = await this.validateAndInvalidBackupCode(user, backupCode)
+                if(!isSecondFactorValid) {
+                    throw new UnauthorizedException('Invalid backup code')
+                }
+            } else if(twoFaToken) {
+                isSecondFactorValid = await this.verifyTwoFa(user, twoFaToken)
+                if(!isSecondFactorValid) {
+                    throw new UnauthorizedException('Invalid two factor authentication token')
+                }
+            } else {
+                throw new TwoFaAuthRequiredException()
+            }
+        }
+        
         const accessToken = this.generateAccessToken({
             id: user.id,
             email: user.email,
@@ -88,6 +111,121 @@ export class AuthService {
         const refreshToken = this.generateRefreshToken({ id: user.id })
 
         return { accessToken, refreshToken }
+    }
+
+    async enableTwoFa(userId: string) {
+        const user = await this.authRepository.findUserById(userId)
+
+        if(!user) {
+            throw new UnauthorizedException('User not found')
+        }
+
+        const secret = otplib.authenticator.generateSecret()
+
+        const encryptedSecret = encrypt(secret, this.environmentService.get("ENCRYPTION_KEY"))
+
+        await this.authRepository.saveTwoFaSecret(userId, encryptedSecret)
+
+        const otpAuth = otplib.authenticator.keyuri(
+            userId, 
+            this.environmentService.get("TWOFA_APP_NAME"), 
+            secret
+        )
+
+        return await qrcode.toDataURL(otpAuth)
+    }
+
+    async confirmTwoFa(userId: string, token: string): Promise<string[]> {
+        const user = await this.authRepository.findUserById(userId)
+
+        if(!user) {
+            throw new UnauthorizedException('User not found')
+        }
+
+        if(!user.twoFaSecret) {
+            throw new UnauthorizedException('Two factor authentication is not initialized')
+        }
+
+        const isValid = await this.verifyTwoFa(user, token)
+
+        if(!isValid) {
+            throw new UnauthorizedException('Invalid two factor authentication token')
+        }
+
+        await this.authRepository.setTwoFaAsEnabled(user.id)
+
+        const backupCodes = this.generateBackupCodes()
+
+        const hashedBackupCodes = await Promise.all(
+            backupCodes.map(code => bcrypt.hash(code, 8))
+        )
+
+        await this.authRepository.saveBackupCodes(user.id, hashedBackupCodes)
+
+        return backupCodes
+    }
+
+    async verifyTwoFa(user: User, token: string): Promise<boolean> {
+        if(!user.twoFaSecret) {
+            throw new UnauthorizedException('Two factor authentication is not enabled')
+        }
+
+        const decryptedSecret = decrypt(user.twoFaSecret, this.environmentService.get("ENCRYPTION_KEY"))
+
+        return otplib.authenticator.verify({ token, secret: decryptedSecret })
+    }
+
+    async disableTwoFa(userId: string): Promise<void> {
+        const user = await this.authRepository.findUserById(userId)
+
+        if(!user) {
+            throw new UnauthorizedException('User not found')
+        }
+
+        if(!user.twoFaEnabled) {
+            throw new UnauthorizedException('Two factor authentication is not enabled')
+        }
+
+        await this.authRepository.disableTwoFa(user.id)
+    }
+
+    private async validateAndInvalidBackupCode(
+        user: User,
+        backupCode: string
+    ): Promise<boolean> {
+        const currentHashes = user.backupCodes
+        let matchingHash: string | null = null
+
+        for(const hash of currentHashes) {
+            const isMatch = await bcrypt.compare(backupCode, hash)
+            if(isMatch) {
+                matchingHash = hash
+                break
+            }
+        }
+
+        if(matchingHash) {
+            const updatedHashes = currentHashes.filter(hash => hash !== matchingHash)
+            await this.authRepository.saveBackupCodes(user.id, updatedHashes)
+            return true
+        }
+
+        return false
+    }
+
+    private generateBackupCodes() {
+        const numberOfCodes = 8
+        const numberOfBytesPerCode = 4
+        const backupCodes: string[] = []
+
+        for(let i = 0; i < numberOfCodes; i++) {
+            const randomBytes = crypto.randomBytes(numberOfBytesPerCode)
+            const code = randomBytes.toString('hex').toUpperCase()
+            const formattedCode = `${code.substring(0, 4)}-${code.substring(4)}`
+            backupCodes.push(formattedCode)
+        }
+
+        return backupCodes
     }
 
     private generateAccessToken(user: Partial<User>) {

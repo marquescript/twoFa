@@ -24,4 +24,12 @@ export class Environment {
     @IsNotEmpty()
     PORT: number
 
+    @IsString()
+    @IsNotEmpty()
+    TWOFA_APP_NAME: string
+
+    @IsString()
+    @IsNotEmpty()
+    ENCRYPTION_KEY: string
+
 }

@@ -37,11 +37,58 @@ export class AuthRepository {
         return this.toDomain(user)
     }
 
+    async saveTwoFaSecret(userId: string, secret: string) {
+        await this.prisma.user.update({
+            where: {
+                id: userId
+            },
+            data: {
+                twoFaSecret: secret
+            }
+        })
+    }
+
+    async setTwoFaAsEnabled(userId: string) {
+        await this.prisma.user.update({
+            where: {
+                id: userId
+            },
+            data: {
+                twoFaEnabled: true
+            }
+        })
+    }
+
+    async disableTwoFa(userId: string) {
+        await this.prisma.user.update({
+            where: {
+                id: userId
+            },
+            data: {
+                twoFaEnabled: false,
+                twoFaSecret: null,
+                backupCodes: { set: [] }
+            }
+        })
+    }
+
+    async saveBackupCodes(userId: string, backupCodes: string[]) {
+        await this.prisma.user.update({
+            where: {
+                id: userId
+            },
+            data: { backupCodes: { set: backupCodes } }
+        })
+    }
+
     private toPrisma(user: User): Prisma.UserCreateInput {
         return {
             email: user.email,
             name: user.name,
             password: user.password,
+            twoFaEnabled: user.twoFaEnabled,
+            twoFaSecret: user.twoFaSecret || undefined,
+            backupCodes: user.backupCodes,
             createdAt: user.createdAt,
             updatedAt: user.updatedAt,
         }
@@ -53,6 +100,9 @@ export class AuthRepository {
             email: user.email,
             name: user.name,
             password: user.password,
+            twoFaEnabled: user.twoFaEnabled,
+            twoFaSecret: user.twoFaSecret || undefined,
+            backupCodes: user.backupCodes,
             createdAt: user.createdAt,
             updatedAt: user.updatedAt,
         })

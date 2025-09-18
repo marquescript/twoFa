@@ -4,6 +4,9 @@ class User {
     email: string;
     name: string;
     password: string;
+    twoFaEnabled: boolean;
+    twoFaSecret?: string;
+    backupCodes: string[];
     createdAt?: Date;
     updatedAt?: Date;
 
