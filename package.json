@@ -17,7 +17,10 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json"
+    "test:db:up": "docker-compose -f docker-compose.test.yml --env-file ./.env.test up -d",
+    "test:db:down": "docker-compose -f docker-compose.test.yml --env-file ./.env.test down -v",
+    "test:db:migrate": "npx dotenv -e .env.test -- npx prisma migrate deploy",
+    "test:e2e": "npm run test:db:up && npm run test:db:migrate && jest --config ./test/jest-e2e.json --runInBand && npm run test:db:down"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
@@ -52,6 +55,8 @@
     "@types/node": "^22.10.7",
     "@types/qrcode": "^1.5.5",
     "@types/supertest": "^6.0.2",
+    "dotenv": "^17.2.2",
+    "dotenv-cli": "^10.0.0",
     "eslint": "^9.18.0",
     "eslint-config-prettier": "^10.0.1",
     "eslint-plugin-prettier": "^5.2.2",
