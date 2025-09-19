@@ -94,3 +94,51 @@ ENCRYPTION_KEY=your-32-byte-key-here
 - `app` ports are defined by `PORT` in `.env` and mapped to the host.
 - The database container exposes `5435` on the host for convenience, but the app connects to `pgsql:5432` inside the Docker network.
 - The image bundles `prisma/schema.prisma`, so Prisma CLI commands (migrate/db push) run inside the container without extra flags.
+
+## Running Tests
+
+### Prerequisites
+- **Node.js** and **pnpm** installed
+- **Docker** and **Docker Compose** installed
+
+### Setup
+1. Create a `.env.test` file at the project root with the following content:
+   ```env
+   # Environment
+   NODE_ENV=test
+   PORT=3001
+
+   # Database (uses the docker-compose test database)
+   DATABASE_URL=postgresql://docker:docker@localhost:5435/two_fa_test?schema=public
+
+   # JWT (same keys as development)
+   JWT_PRIVATE_KEY=-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----
+   JWT_PUBLIC_KEY=-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----
+
+   # 2FA
+   TWOFA_APP_NAME=TwoFA Demo Test
+
+   # Encryption key (same as development)
+   ENCRYPTION_KEY=your-32-byte-key-here
+   ```
+
+2. Run the end-to-end tests:
+   ```bash
+   pnpm test:e2e
+   ```
+
+### What the test command does
+The `pnpm test:e2e` command will:
+1. Start a test PostgreSQL database using Docker Compose
+2. Run database migrations
+3. Execute all end-to-end tests
+4. Clean up the test database
+
+### Test Features
+The test suite covers:
+- User registration and login
+- Two-factor authentication setup and confirmation
+- Backup code generation and validation
+- 2FA enable/disable functionality
+- JWT token validation
+- Error handling scenarios
