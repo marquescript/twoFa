@@ -43,6 +43,23 @@ jobs:
         TWOFA_APP_NAME="${{ secrets.TWOFA_APP_NAME }}"
         EOF
 
+    - name: Start database
+      run: docker compose -f docker-compose.test.yml --env-file ./.env.test up -d
+
+    - name: Wait for Postgres
+      run: |
+        echo "⏳ Esperando o Postgres ficar pronto..."
+        for i in {1..15}; do
+          if docker exec $(docker ps -qf "name=pgsql") pg_isready -U docker; then
+            echo "✅ Postgres está pronto!"
+            exit 0
+          fi
+          echo "Ainda não pronto, tentando novamente..."
+          sleep 5
+        done
+        echo "❌ Postgres não subiu a tempo."
+        exit 1
+
     - name: Run e2e tests
       run: pnpm test:e2e
 

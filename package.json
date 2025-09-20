@@ -20,7 +20,7 @@
     "test:db:up": "docker compose -f docker-compose.test.yml --env-file ./.env.test up -d",
     "test:db:down": "docker compose -f docker-compose.test.yml --env-file ./.env.test down -v",
     "test:db:migrate": "npx dotenv -e .env.test -- npx prisma migrate deploy",
-    "test:e2e": "npm run test:db:up && npm run test:db:migrate && jest --config ./test/jest-e2e.json --runInBand && npm run test:db:down"
+    "test:e2e": "npm run test:db:migrate && jest --config ./test/jest-e2e.json --runInBand"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
