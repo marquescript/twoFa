@@ -9,6 +9,7 @@ jobs:
   build:
     name: "Build and Test"
     runs-on: ubuntu-latest
+    environment: ENV_FILE_TEST
 
     steps:
     - uses: actions/checkout@v4
@@ -31,7 +32,14 @@ jobs:
       run: pnpm install
 
     - name: Setup env test file
-      run: echo "${{ secrets.ENV_FILE_TEST }}" > .env.test
+      run: |
+        echo "DATABASE_URL=${{ secrets.DATABASE_URL }}" > .env.test
+        echo "ENCRYPTION_KEY=${{ secrets.ENCRYPTION_KEY }}" >> .env.test
+        echo "JWT_PRIVATE_KEY=${{ secrets.JWT_PRIVATE_KEY }}" >> .env.test
+        echo "JWT_PUBLIC_KEY=${{ secrets.JWT_PUBLIC_KEY }}" >> .env.test
+        echo "NODE_ENV=${{ secrets.NODE_ENV }}" >> .env.test
+        echo "PORT=${{ secrets.PORT }}" >> .env.test
+        echo "TWOFA_APP_NAME=${{ secrets.TWOFA_APP_NAME }}" >> .env.test
 
     - name: Run e2e tests
       run: pnpm test:e2e
