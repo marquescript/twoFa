@@ -34,13 +34,13 @@ jobs:
     - name: Setup env test file
       run: |
         cat <<EOF > .env.test
-        DATABASE_URL='${{ secrets.DATABASE_URL }}'
-        ENCRYPTION_KEY='${{ secrets.ENCRYPTION_KEY }}'
-        JWT_PRIVATE_KEY='${{ secrets.JWT_PRIVATE_KEY }}'
-        JWT_PUBLIC_KEY='${{ secrets.JWT_PUBLIC_KEY }}'
-        NODE_ENV='${{ secrets.NODE_ENV }}'
-        PORT='${{ secrets.PORT }}'
-        TWOFA_APP_NAME='${{ secrets.TWOFA_APP_NAME }}'
+        DATABASE_URL="${{ secrets.DATABASE_URL }}"
+        ENCRYPTION_KEY="${{ secrets.ENCRYPTION_KEY }}"
+        JWT_PRIVATE_KEY="${{ secrets.JWT_PRIVATE_KEY }}"
+        JWT_PUBLIC_KEY="${{ secrets.JWT_PUBLIC_KEY }}"
+        NODE_ENV="${{ secrets.NODE_ENV }}"
+        PORT="${{ secrets.PORT }}"
+        TWOFA_APP_NAME="${{ secrets.TWOFA_APP_NAME }}"
         EOF
 
     - name: Run e2e tests
