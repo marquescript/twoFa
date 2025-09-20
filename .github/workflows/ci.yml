@@ -79,4 +79,4 @@ jobs:
       uses: docker/build-push-action@v5
       with:
         push: true
-        tags: marquescript/twoFa-api:${{ steps.generate_tag.outputs.sha }},marquescript/twoFa-api:latest
+        tags: marquescript/twofa-api:${{ steps.generate_tag.outputs.sha }},marquescript/twofa-api:latest
