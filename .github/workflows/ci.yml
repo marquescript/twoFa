@@ -31,6 +31,9 @@ jobs:
     - name: Install dependencies
       run: pnpm install
 
+    - name: Generate Prisma Client
+      run: pnpm prisma generate
+
     - name: Setup env test file
       run: |
         cat <<EOF > .env.test
