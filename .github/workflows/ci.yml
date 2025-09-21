@@ -47,7 +47,7 @@ jobs:
       run: pnpm test:db:up
 
     - name: Wait for Postgres
-      uses: jwlawson/wait-for-it-action@v1
+      uses: if-it-is-a-wait/wait-for-it@v1
       with:
         hosts: localhost:5435
         timeout: 30
