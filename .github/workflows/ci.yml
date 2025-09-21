@@ -47,10 +47,18 @@ jobs:
       run: pnpm test:db:up
 
     - name: Wait for Postgres
-      uses: if-it-is-a-wait/wait-for-it@v1
-      with:
-        hosts: localhost:5435
-        timeout: 30
+      run: |
+          echo "Waiting for PostgreSQL on localhost:5435..."
+          for i in {1..60}; do
+            # O comando 'nc' (netcat) testa se a porta está aberta
+            if nc -z localhost 5435; then
+              echo "✅ Database is ready!"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "❌ Error: Timed out after 60 seconds waiting for database."
+          exit 1
 
     - name: Run e2e tests
       run: pnpm test:e2e
