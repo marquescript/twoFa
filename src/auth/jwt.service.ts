@@ -11,4 +11,8 @@ export class JwtService {
     verify(token: string, key: string) {
         return jwt.verify(token, key)
     }
+
+    decode(token: string) {
+        return jwt.decode(token)
+    }
 }

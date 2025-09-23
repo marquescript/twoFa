@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - develop
+
+jobs:
+  test:
+    name: "Run Tests"
+    runs-on: ubuntu-latest
+    environment: ENV_FILE_TEST
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v4
+      with:
+        version: 9
+    
+    - name: Setup node
+      uses: actions/setup-node@v4
+      with:
+        node-version: 22
+        cache: pnpm
+
+    - name: Install dependencies
+      run: pnpm install
+
+    - name: Generate Prisma Client
+      run: pnpm prisma generate
+
+    - name: Setup env test file
+      run: |
+        cat <<EOF > .env.test
+        DATABASE_URL="${{ secrets.DATABASE_URL }}"
+        ENCRYPTION_KEY="${{ secrets.ENCRYPTION_KEY }}"
+        JWT_PRIVATE_KEY="${{ secrets.JWT_PRIVATE_KEY }}"
+        JWT_PUBLIC_KEY="${{ secrets.JWT_PUBLIC_KEY }}"
+        NODE_ENV="${{ secrets.NODE_ENV }}"
+        PORT="${{ secrets.PORT }}"
+        TWOFA_APP_NAME="${{ secrets.TWOFA_APP_NAME }}"
+        REDIS_HOST="${{ secrets.REDIS_HOST }}"
+        REDIS_PORT="${{ secrets.REDIS_PORT }}"
+        REDIS_PASSWORD="${{ secrets.REDIS_PASSWORD }}"
+        EOF
+
+    - name: Start database
+      run: pnpm test:db:up
+
+    - name: Wait for Postgres
+      run: |
+          echo "Waiting for PostgreSQL on localhost:5435..."
+          for i in {1..60}; do
+            # O comando 'nc' (netcat) testa se a porta está aberta
+            if nc -z localhost 5435; then
+              echo "✅ Database is ready!"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "❌ Error: Timed out after 60 seconds waiting for database."
+          exit 1
+
+    - name: Run e2e tests
+      run: pnpm test:e2e
+
+    - name: Stop database
+      if: always()
+      run: pnpm test:db:down

@@ -25,6 +25,7 @@ export class VerifyRefreshJwtGuard implements CanActivate {
             const payload = this.jwtService.verify(token, this.environmentService.get("JWT_PUBLIC_KEY")) as JwtPayload
 
             request.jwtPayload = payload
+            request.refreshToken = token
         }catch(err) {
             throw new UnauthorizedException("Refresh token invalid or expired")
         }

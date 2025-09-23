@@ -13,3 +13,20 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  redis:
+    image: redis
+    container_name: two-fa-redis-test
+    command: ["redis-server", "--requirepass", "docker_test"]
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis-data-test:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a docker_test ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  redis-data-test:

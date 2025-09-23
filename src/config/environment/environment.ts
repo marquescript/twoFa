@@ -32,4 +32,16 @@ export class Environment {
     @IsNotEmpty()
     ENCRYPTION_KEY: string
 
+    @IsString()
+    @IsNotEmpty()
+    REDIS_HOST: string
+
+    @IsNumber()
+    @IsNotEmpty()
+    REDIS_PORT: number
+
+    @IsString()
+    @IsNotEmpty()
+    REDIS_PASSWORD: string
+
 }

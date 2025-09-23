@@ -17,10 +17,11 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:db:up": "docker-compose -f docker-compose.test.yml --env-file ./.env.test up -d",
-    "test:db:down": "docker-compose -f docker-compose.test.yml --env-file ./.env.test down -v",
+    "test:db:up": "docker compose -f docker-compose.test.yml --env-file ./.env.test up -d",
+    "test:db:down": "docker compose -f docker-compose.test.yml --env-file ./.env.test down -v",
     "test:db:migrate": "npx dotenv -e .env.test -- npx prisma migrate deploy",
-    "test:e2e": "npm run test:db:up && npm run test:db:migrate && jest --config ./test/jest-e2e.json --runInBand && npm run test:db:down"
+    "test:e2e": "npm run test:db:migrate && jest --config ./test/jest-e2e.json --runInBand --detectOpenHandles --forceExit",
+    "test:e2e:local": "npm run test:db:up && npm run test:db:migrate && jest --config ./test/jest-e2e.json --runInBand --detectOpenHandles --forceExit && npm run test:db:down"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
@@ -34,6 +35,7 @@
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.2",
     "cookie-parser": "^1.4.7",
+    "ioredis": "^5.7.0",
     "jsonwebtoken": "^9.0.2",
     "otplib": "^12.0.1",
     "qrcode": "^1.5.4",

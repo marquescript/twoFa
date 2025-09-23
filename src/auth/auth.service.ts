@@ -11,12 +11,15 @@ import * as qrcode from "qrcode";
 import { decrypt, encrypt } from "./utils/crypto";
 import { TwoFaAuthRequiredException } from "./exceptions/two-fa-auth-required";
 import * as crypto from 'crypto';
+import { REFRESH_TOKEN_EXPIRATION_TIME } from "./utils/constants";
+import { AuthMemoryRepository } from "./auth.memory.repository";
 
 @Injectable()
 export class AuthService {
 
     constructor(
         private readonly authRepository: AuthRepository,
+        private readonly authMemoryRepository: AuthMemoryRepository,
         private readonly jwtService: JwtService,
         private readonly environmentService: EnvironmentService
     ) {}
@@ -49,6 +52,8 @@ export class AuthService {
         })
 
         const refreshToken = this.generateRefreshToken({ id: userCreated.id })
+
+        await this.authMemoryRepository.storeRefreshToken(userCreated.id, refreshToken)
 
         return { accessToken, refreshToken }
     }
@@ -90,10 +95,12 @@ export class AuthService {
 
         const refreshToken = this.generateRefreshToken({ id: user.id })
 
+        await this.authMemoryRepository.storeRefreshToken(user.id, refreshToken)
+
         return { accessToken, refreshToken }
     }
 
-    async refreshTokens(userId: string): Promise<{ 
+    async refreshTokens(userId: string, refreshToken: string): Promise<{ 
         accessToken: string, 
         refreshToken: string 
     }> {
@@ -103,14 +110,18 @@ export class AuthService {
             throw new UnauthorizedException('User not found')
         }
 
+        await this.validateRefreshToken(userId, refreshToken)
+
         const accessToken = this.generateAccessToken({
             id: user.id,
             email: user.email,
         })
 
-        const refreshToken = this.generateRefreshToken({ id: user.id })
+        const newRefreshToken = this.generateRefreshToken({ id: user.id })
 
-        return { accessToken, refreshToken }
+        await this.authMemoryRepository.addRefreshTokenInTheExistingSession(userId, newRefreshToken)
+
+        return { accessToken, refreshToken: newRefreshToken }
     }
 
     async enableTwoFa(userId: string) {
@@ -189,6 +200,23 @@ export class AuthService {
         await this.authRepository.disableTwoFa(user.id)
     }
 
+    async logout(userId: string, jti: string, exp: number): Promise<void> {
+        const user = await this.authRepository.findUserById(userId)
+
+        if(!user) {
+            throw new UnauthorizedException('User not found')
+        }
+
+        const currentTimeInSeconds = Math.floor(Date.now() / 1000)
+        const remainingTime = exp - currentTimeInSeconds
+
+        if(remainingTime > 0) {
+            await this.authMemoryRepository.addToAccessTokenDenyList(jti, remainingTime)
+        }
+
+        await this.authMemoryRepository.deleteAllRefreshToken(userId)
+    }
+
     private async validateAndInvalidBackupCode(
         user: User,
         backupCode: string
@@ -232,6 +260,7 @@ export class AuthService {
         const payload = {
             sub: user.id,
             email: user.email,
+            jti: crypto.randomUUID()
         }
         
         const token = this.jwtService.sign(payload, this.environmentService.get("JWT_PRIVATE_KEY"), { 
@@ -244,12 +273,29 @@ export class AuthService {
     private generateRefreshToken(user: Partial<User>) {
         const payload = {
             sub: user.id,
+            jti: crypto.randomUUID()
         }
         
         const token = this.jwtService.sign(payload, this.environmentService.get("JWT_PRIVATE_KEY"), { 
-            expiresIn: '7d',
+            expiresIn: REFRESH_TOKEN_EXPIRATION_TIME,
             algorithm: 'RS256'
         })
         return token
+    }
+
+    private async validateRefreshToken(userId: string, refreshToken: string) {
+        const refreshTokens = await this.authMemoryRepository.getRefreshToken(userId)
+
+        if(refreshTokens.length === 0) {
+            throw new UnauthorizedException("Session not found or expired")
+        }
+
+        const latestValidRefreshToken = refreshTokens[0]
+        const tokenExistsInSession = refreshTokens.includes(refreshToken)
+
+        if(!tokenExistsInSession || refreshToken !== latestValidRefreshToken) {
+            await this.authMemoryRepository.deleteAllRefreshToken(userId)
+            throw new UnauthorizedException("Invalid refresh token")
+        }
     }
 }

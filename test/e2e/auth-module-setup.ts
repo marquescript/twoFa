@@ -5,6 +5,7 @@ import { AuthModule } from "src/auth/auth.module";
 import { PrismaService } from "src/config/database/prisma.service";
 import * as bcrypt from "bcryptjs"
 import { AuthServiceMockTest } from "./auth-service-mock-test";
+import { RedisService } from "src/config/database/redis.service";
 
 export class AuthModuleSetup {
 
@@ -12,6 +13,7 @@ export class AuthModuleSetup {
     public prisma: PrismaService
     public httpServer: any
     public authServiceMockTest: AuthServiceMockTest
+    public redis: RedisService
 
     async setup() {
         const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -28,6 +30,7 @@ export class AuthModuleSetup {
         this.prisma = this.app.get(PrismaService)
         this.httpServer = this.app.getHttpServer()
         this.authServiceMockTest = this.app.get(AuthServiceMockTest)
+        this.redis = this.app.get(RedisService)
     }
 
     async teardown() {
@@ -36,6 +39,7 @@ export class AuthModuleSetup {
 
     async cleanDatabase() {
         await this.prisma.user.deleteMany()
+        await this.redis.flushall()
     }
 
     async seedDatabase() {
