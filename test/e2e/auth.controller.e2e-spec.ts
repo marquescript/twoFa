@@ -2,10 +2,10 @@ import { CreateUserDto } from "src/auth/dto/create-user.dto"
 import { AuthModuleSetup } from "./auth-module-setup"
 import * as request from 'supertest';
 import { HttpStatus } from "@nestjs/common";
-import { LoginDto } from "src/auth/dto/login.dto";
 import * as otplib from "otplib";
 import { encrypt } from "src/auth/utils/crypto";
 import { EnvironmentService } from "src/config/environment/environment.service";
+import { CompleteTwoFactorDto, InitialLoginDto } from "src/auth/dto/login.dto";
 
 describe("AuthController (e2e)", () => {
 
@@ -73,9 +73,9 @@ describe("AuthController (e2e)", () => {
 
         describe("POST /login", () => {
 
-            it("should login a user", async () => {
+            it("should login a 2fa disabled user", async () => {
 
-                const loginDto: LoginDto = {
+                const loginDto: InitialLoginDto = {
                     email: seededDatabase.user.email,
                     password: "password123"
                 }
@@ -100,7 +100,7 @@ describe("AuthController (e2e)", () => {
 
             it("should return a two factor authentication required error if the user has two factor authentication enabled", async () => {
                 
-                const loginDto: LoginDto = {
+                const loginDto: InitialLoginDto = {
                     email: seededDatabase.user.email,
                     password: "password123"
                 }
@@ -121,6 +121,47 @@ describe("AuthController (e2e)", () => {
 
                 const body = response.body
                 expect(body["errorCode"]).toBe("2FA_REQUIRED")
+                expect(body["temporaryToken"]).toBeDefined()
+            })
+
+            it("should return success if the two factor authentication is valid", async () => {
+
+                const twoFaSecret = otplib.authenticator.generateSecret()
+
+                const encryptedTwoFaSecret = encrypt(twoFaSecret, setupContext.app.get(EnvironmentService).get("ENCRYPTION_KEY"))
+
+                await setupContext.prisma.user.update({
+                    where: {
+                        id: seededDatabase.user.id
+                    },
+                    data: { twoFaEnabled: true, twoFaSecret: encryptedTwoFaSecret }
+                })
+                
+                const loginRequest = await request(setupContext.httpServer)
+                    .post("/auth/login")
+                    .send({
+                        email: seededDatabase.user.email,
+                        password: "password123"
+                    })
+                    .expect(HttpStatus.UNAUTHORIZED)
+
+                expect(loginRequest.body["errorCode"]).toBe("2FA_REQUIRED")
+                    
+                const temporaryToken = loginRequest.body.temporaryToken
+
+                expect(temporaryToken).toBeDefined()
+
+                const loginTwoFactorDto: CompleteTwoFactorDto = {
+                    twoFaToken: setupContext.authServiceMockTest.generateValidTwoFaToken(twoFaSecret),
+                    temporaryToken
+                }
+                
+                const response = await request(setupContext.httpServer)
+                    .post("/auth/login/two-factor")
+                    .send(loginTwoFactorDto)
+                    .expect(HttpStatus.OK)
+
+                expect(response.body.accessToken).toBeDefined()
             })
 
             it("should return a invalid credentials error if the two factor authentication token is invalid", async () => {
@@ -136,14 +177,18 @@ describe("AuthController (e2e)", () => {
                     data: { twoFaEnabled: true, twoFaSecret: encryptedTwoFaSecret }
                 })
 
-                const loginDto: LoginDto = {
-                    email: seededDatabase.user.email,
-                    password: "password123",
+                const temporaryToken = await setupContext.authServiceMockTest.generateTemporaryTokenTest(
+                    seededDatabase.user.id, 
+                    setupContext.app.get(EnvironmentService).get("JWT_PRIVATE_KEY")
+                )
+
+                const loginDto: CompleteTwoFactorDto = {
                     twoFaToken: "123456",
+                    temporaryToken
                 }
 
                 await request(setupContext.httpServer)
-                    .post("/auth/login")
+                    .post("/auth/login/two-factor")
                     .send(loginDto)
                     .expect(HttpStatus.UNAUTHORIZED)
             })
@@ -156,19 +201,23 @@ describe("AuthController (e2e)", () => {
 
                 const encryptedTwoFaSecret = encrypt(twoFaSecret, setupContext.app.get(EnvironmentService).get("ENCRYPTION_KEY"))
 
-                const user = await setupContext.prisma.user.update({
+                await setupContext.prisma.user.update({
                     where: { id: seededDatabase.user.id },
                     data: { backupCodes: hashedBackupCodes, twoFaEnabled: true, twoFaSecret: encryptedTwoFaSecret }
                 })
 
-                const loginDto: LoginDto = {
-                    email: user.email,
-                    password: "password123",
-                    backupCode: "invalid_backup_code"
+                const temporaryToken = await setupContext.authServiceMockTest.generateTemporaryTokenTest(
+                    seededDatabase.user.id, 
+                    setupContext.app.get(EnvironmentService).get("JWT_PRIVATE_KEY")
+                )
+
+                const loginDto: CompleteTwoFactorDto = {
+                    backupCode: "invalid_backup_code",
+                    temporaryToken
                 }
 
                 const response = await request(setupContext.httpServer)
-                    .post("/auth/login")
+                    .post("/auth/login/two-factor")
                     .send(loginDto)
                     .expect(HttpStatus.UNAUTHORIZED)
 
@@ -189,14 +238,18 @@ describe("AuthController (e2e)", () => {
                     data: { backupCodes: hashedBackupCodes, twoFaEnabled: true, twoFaSecret: encryptedTwoFaSecret }
                 })
 
-                const loginDto: LoginDto = {
-                    email: user.email,
-                    password: "password123",
-                    backupCode: backupCodes[0]
+                const temporaryToken = await setupContext.authServiceMockTest.generateTemporaryTokenTest(
+                    seededDatabase.user.id, 
+                    setupContext.app.get(EnvironmentService).get("JWT_PRIVATE_KEY")
+                )
+
+                const loginDto: CompleteTwoFactorDto = {
+                    backupCode: backupCodes[0],
+                    temporaryToken
                 }
 
                 const response = await request(setupContext.httpServer)
-                    .post("/auth/login")
+                    .post("/auth/login/two-factor")
                     .send(loginDto)
                     .expect(HttpStatus.OK)
 
@@ -343,7 +396,7 @@ describe("AuthController (e2e)", () => {
 
             it("should return a unauthorized error if the refresh token is invalid", async () => {
                 
-                const loginDto: LoginDto = {
+                const loginDto: InitialLoginDto = {
                     email: seededDatabase.user.email,
                     password: "password123"
                 }
@@ -371,7 +424,7 @@ describe("AuthController (e2e)", () => {
 
             it("should logout a user", async () => {
 
-                const loginDto: LoginDto = {
+                const loginDto: InitialLoginDto = {
                     email: seededDatabase.user.email,
                     password: "password123"
                 }
