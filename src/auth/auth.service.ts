@@ -13,6 +13,7 @@ import { TwoFaAuthRequiredException } from "./exceptions/two-fa-auth-required";
 import * as crypto from 'crypto';
 import { REFRESH_TOKEN_EXPIRATION_TIME } from "./utils/constants";
 import { AuthMemoryRepository } from "./auth.memory.repository";
+import { LoggerService } from "src/config/logger/logger.service";
 
 @Injectable()
 export class AuthService {
@@ -21,13 +22,17 @@ export class AuthService {
         private readonly authRepository: AuthRepository,
         private readonly authMemoryRepository: AuthMemoryRepository,
         private readonly jwtService: JwtService,
-        private readonly environmentService: EnvironmentService
-    ) {}
+        private readonly environmentService: EnvironmentService,
+        private readonly logger: LoggerService
+    ) {
+        this.logger.setContext("auth.service")
+    }
 
     async createUser(input: CreateUserDto): Promise<{
         accessToken: string, 
         refreshToken: string
     }> {
+        this.logger.log("Creating user", { email: input.email, name: input.name })
         const { email, name, password } = input
 
         const isEmailExists = await this.authRepository.findUserByEmail(email)
@@ -55,6 +60,8 @@ export class AuthService {
 
         await this.authMemoryRepository.storeRefreshToken(userCreated.id, refreshToken)
 
+        this.logger.log("User created", { email: userCreated.email, name: userCreated.name })
+
         return { accessToken, refreshToken }
     }
 
@@ -62,13 +69,18 @@ export class AuthService {
         accessToken: string, 
         refreshToken: string 
     }> {
+        this.logger.log("Logging in a user", { email: input.email })
+
         const { email, password, twoFaToken, backupCode } = input
 
         const user = await this.authRepository.findUserByEmail(email)
 
         if(!user || !(await bcrypt.compare(password, user.password))) {
+            this.logger.warn("Invalid credentials", { email: input.email })
             throw new UnauthorizedException('Invalid credentials')
         }
+
+        let typeAuthentication: "backupCode" | "twoFaToken" | "default" = "default"
 
         if(user.twoFaEnabled) {
             let isSecondFactorValid = false
@@ -76,14 +88,19 @@ export class AuthService {
             if(backupCode) {
                 isSecondFactorValid = await this.validateAndInvalidBackupCode(user, backupCode)
                 if(!isSecondFactorValid) {
+                    this.logger.warn("Invalid backup code", { userId: user.id })
                     throw new UnauthorizedException('Invalid backup code')
                 }
+                typeAuthentication = "backupCode"
             } else if(twoFaToken) {
                 isSecondFactorValid = await this.verifyTwoFa(user, twoFaToken)
                 if(!isSecondFactorValid) {
+                    this.logger.warn("Invalid two factor authentication token", { userId: user.id })
                     throw new UnauthorizedException('Invalid two factor authentication token')
                 }
+                typeAuthentication = "twoFaToken"
             } else {
+                this.logger.warn("Two factor authentication required", { userId: user.id })
                 throw new TwoFaAuthRequiredException()
             }
         }
@@ -97,6 +114,8 @@ export class AuthService {
 
         await this.authMemoryRepository.storeRefreshToken(user.id, refreshToken)
 
+        this.logger.log("Login successful", { userId: user.id, typeAuthentication })
+
         return { accessToken, refreshToken }
     }
 
@@ -107,6 +126,7 @@ export class AuthService {
         const user = await this.authRepository.findUserById(userId)
 
         if(!user) {
+            this.logger.warn("User not found", { userId })
             throw new UnauthorizedException('User not found')
         }
 
@@ -121,13 +141,17 @@ export class AuthService {
 
         await this.authMemoryRepository.addRefreshTokenInTheExistingSession(userId, newRefreshToken)
 
+        this.logger.log("Refresh token rotated", { userId })
         return { accessToken, refreshToken: newRefreshToken }
     }
 
     async enableTwoFa(userId: string) {
+        this.logger.log("Enabling two factor authentication", { userId })
+
         const user = await this.authRepository.findUserById(userId)
 
         if(!user) {
+            this.logger.warn("User not found", { userId })
             throw new UnauthorizedException('User not found')
         }
 
@@ -143,23 +167,30 @@ export class AuthService {
             secret
         )
 
+        this.logger.log("Two factor authentication enabled", { userId })
+
         return await qrcode.toDataURL(otpAuth)
     }
 
     async confirmTwoFa(userId: string, token: string): Promise<string[]> {
+        this.logger.log("Confirming two factor authentication", { userId })
+
         const user = await this.authRepository.findUserById(userId)
 
         if(!user) {
+            this.logger.warn("User not found", { userId })
             throw new UnauthorizedException('User not found')
         }
 
         if(!user.twoFaSecret) {
+            this.logger.warn("Two factor authentication is not initialized", { userId })
             throw new UnauthorizedException('Two factor authentication is not initialized')
         }
 
         const isValid = await this.verifyTwoFa(user, token)
 
         if(!isValid) {
+            this.logger.warn("Invalid two factor authentication token", { userId })
             throw new UnauthorizedException('Invalid two factor authentication token')
         }
 
@@ -173,11 +204,16 @@ export class AuthService {
 
         await this.authRepository.saveBackupCodes(user.id, hashedBackupCodes)
 
+        this.logger.log("Two factor authentication confirmed", { userId })
+
         return backupCodes
     }
 
-    async verifyTwoFa(user: User, token: string): Promise<boolean> {
+    private async verifyTwoFa(user: User, token: string): Promise<boolean> {
+        this.logger.debug("Verifying two factor authentication", { userId: user.id })
+
         if(!user.twoFaSecret) {
+            this.logger.warn("Two factor authentication is not enabled", { userId: user.id })
             throw new UnauthorizedException('Two factor authentication is not enabled')
         }
 
@@ -187,23 +223,30 @@ export class AuthService {
     }
 
     async disableTwoFa(userId: string): Promise<void> {
+        this.logger.log("Disabling two factor authentication", { userId })
+
         const user = await this.authRepository.findUserById(userId)
 
         if(!user) {
+            this.logger.warn("User not found", { userId })
             throw new UnauthorizedException('User not found')
         }
 
         if(!user.twoFaEnabled) {
+            this.logger.warn("Two factor authentication is not enabled", { userId: user.id })
             throw new UnauthorizedException('Two factor authentication is not enabled')
         }
 
         await this.authRepository.disableTwoFa(user.id)
+
+        this.logger.log("Two factor authentication disabled", { userId })
     }
 
     async logout(userId: string, jti: string, exp: number): Promise<void> {
         const user = await this.authRepository.findUserById(userId)
 
         if(!user) {
+            this.logger.warn("User not found", { userId })
             throw new UnauthorizedException('User not found')
         }
 
@@ -221,6 +264,8 @@ export class AuthService {
         user: User,
         backupCode: string
     ): Promise<boolean> {
+        this.logger.debug("Validating and invalid backup code", { userId: user.id })
+        
         const currentHashes = user.backupCodes
         let matchingHash: string | null = null
 
@@ -242,6 +287,8 @@ export class AuthService {
     }
 
     private generateBackupCodes() {
+        this.logger.debug("Generating backup codes")
+        
         const numberOfCodes = 8
         const numberOfBytesPerCode = 4
         const backupCodes: string[] = []
@@ -257,6 +304,8 @@ export class AuthService {
     }
 
     private generateAccessToken(user: Partial<User>) {
+        this.logger.debug("Generating access token", { userId: user.id })
+        
         const payload = {
             sub: user.id,
             email: user.email,
@@ -271,6 +320,8 @@ export class AuthService {
     }
 
     private generateRefreshToken(user: Partial<User>) {
+        this.logger.debug("Generating refresh token", { userId: user.id })
+        
         const payload = {
             sub: user.id,
             jti: crypto.randomUUID()
@@ -284,9 +335,12 @@ export class AuthService {
     }
 
     private async validateRefreshToken(userId: string, refreshToken: string) {
+        this.logger.debug("Validating refresh token", { userId })
+        
         const refreshTokens = await this.authMemoryRepository.getRefreshToken(userId)
 
         if(refreshTokens.length === 0) {
+            this.logger.warn("Session not found or expired", { userId })
             throw new UnauthorizedException("Session not found or expired")
         }
 
@@ -295,6 +349,7 @@ export class AuthService {
 
         if(!tokenExistsInSession || refreshToken !== latestValidRefreshToken) {
             await this.authMemoryRepository.deleteAllRefreshToken(userId)
+            this.logger.warn("Invalid refresh token", { userId })
             throw new UnauthorizedException("Invalid refresh token")
         }
     }

@@ -3,12 +3,18 @@ import { AppModule } from './app.module';
 import * as cookieParser from "cookie-parser";
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { EnvironmentService } from './config/environment/environment.service';
+import { LoggerService } from './config/logger/logger.service';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    bufferLogs: true,
+  });
 
   const environmentService = app.get(EnvironmentService)
+  const logger = await app.resolve(LoggerService)
 
+  app.useLogger(logger)
+  
   app.use(cookieParser())
 
   app.enableCors({
@@ -34,6 +40,8 @@ async function bootstrap() {
   const documentFactory = () => SwaggerModule.createDocument(app, config)
   SwaggerModule.setup("api", app, documentFactory)
 
+  logger.log(`Swagger documentation is available at http://localhost:${environmentService.get("PORT")}/api`)
+  logger.log(`Server is running on port ${environmentService.get("PORT")}`)
   await app.listen(environmentService.get("PORT"));
 }
 bootstrap();

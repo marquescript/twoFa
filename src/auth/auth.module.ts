@@ -8,11 +8,13 @@ import { AuthController } from "./auth.controller";
 import { DatabaseModule } from "../config/database/database.module";
 import { EnvironmentModule } from "../config/environment/environment.module";
 import { AuthMemoryRepository } from "./auth.memory.repository";
+import { LoggerModule } from "src/config/logger/logger.module";
 
 @Module({
     imports: [
         DatabaseModule,
-        EnvironmentModule
+        EnvironmentModule,
+        LoggerModule
     ],
     controllers: [
         AuthController

@@ -28,6 +28,11 @@ This API includes a comprehensive set of features for modern authentication:
 - **Secure Backup Code Storage**: Backup codes are hashed using bcryptjs before being stored
 - **Login with Backup Code**: Allows users who have lost their authenticator device to regain access
 
+### Session and Token Management (Redis)
+- **Refresh Token Session Store**: Each user has a refresh-token session stored in Redis. Only the latest refresh token is considered valid; when rotating tokens, the new token substitues the previous one in the session.
+- **Validation Strategy**: On refresh, the provided token must exist in the user's Redis session and match the most recent token; otherwise, the session is invalidated to prevent replay.
+- **Access Token Denylist**: On logout, the current access token `jti` is stored in Redis with TTL equal to the remaining lifetime. Incoming requests can be checked against this denylist to immediately invalidate logged-out tokens.
+
 ### Clear API Communication
 - Uses custom error codes (e.g., 2FA_REQUIRED) to provide unambiguous responses to the client, enabling a better user experience
 

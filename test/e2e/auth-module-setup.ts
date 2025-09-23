@@ -19,9 +19,13 @@ export class AuthModuleSetup {
         const moduleFixture: TestingModule = await Test.createTestingModule({
             imports: [AuthModule],
             providers: [AuthServiceMockTest]
-        }).compile()
+        })
+        .compile()
 
-        this.app = moduleFixture.createNestApplication()
+        this.app = moduleFixture.createNestApplication({
+            logger: false,
+            bufferLogs: false
+        })
 
         this.app.use(cookieParser())
 
