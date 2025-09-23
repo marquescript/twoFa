@@ -5,7 +5,7 @@ import * as bcrypt from 'bcryptjs';
 import User from "./user.model";
 import { JwtService } from "./jwt.service";
 import { EnvironmentService } from "src/config/environment/environment.service";
-import { LoginDto } from "./dto/login.dto";
+import { CompleteTwoFactorDto, InitialLoginDto } from "./dto/login.dto";
 import * as otplib from "otplib";
 import * as qrcode from "qrcode";
 import { decrypt, encrypt } from "./utils/crypto";
@@ -14,6 +14,9 @@ import * as crypto from 'crypto';
 import { REFRESH_TOKEN_EXPIRATION_TIME } from "./utils/constants";
 import { AuthMemoryRepository } from "./auth.memory.repository";
 import { LoggerService } from "src/config/logger/logger.service";
+import { JwtPayload } from "./@types/express";
+
+type AuthenticationType = "backupCode" | "twoFaToken" | "default"
 
 @Injectable()
 export class AuthService {
@@ -65,13 +68,13 @@ export class AuthService {
         return { accessToken, refreshToken }
     }
 
-    async login(input: LoginDto): Promise<{ 
+    async initiateLogin(input: InitialLoginDto): Promise<{
         accessToken: string, 
         refreshToken: string 
     }> {
-        this.logger.log("Logging in a user", { email: input.email })
+        this.logger.log("Initiating login", { email: input.email })
 
-        const { email, password, twoFaToken, backupCode } = input
+        const { email, password } = input
 
         const user = await this.authRepository.findUserByEmail(email)
 
@@ -80,43 +83,67 @@ export class AuthService {
             throw new UnauthorizedException('Invalid credentials')
         }
 
-        let typeAuthentication: "backupCode" | "twoFaToken" | "default" = "default"
+        if(!user.twoFaEnabled) {
+            this.logger.log("Login successful (2FA disabled)", { userId: user.id });
 
-        if(user.twoFaEnabled) {
-            let isSecondFactorValid = false
-
-            if(backupCode) {
-                isSecondFactorValid = await this.validateAndInvalidBackupCode(user, backupCode)
-                if(!isSecondFactorValid) {
-                    this.logger.warn("Invalid backup code", { userId: user.id })
-                    throw new UnauthorizedException('Invalid backup code')
-                }
-                typeAuthentication = "backupCode"
-            } else if(twoFaToken) {
-                isSecondFactorValid = await this.verifyTwoFa(user, twoFaToken)
-                if(!isSecondFactorValid) {
-                    this.logger.warn("Invalid two factor authentication token", { userId: user.id })
-                    throw new UnauthorizedException('Invalid two factor authentication token')
-                }
-                typeAuthentication = "twoFaToken"
-            } else {
-                this.logger.warn("Two factor authentication required", { userId: user.id })
-                throw new TwoFaAuthRequiredException()
-            }
+            return this.grantFinalTokens(user.id, user.email, "default")
         }
-        
-        const accessToken = this.generateAccessToken({
-            id: user.id,
-            email: user.email,
-        })
 
-        const refreshToken = this.generateRefreshToken({ id: user.id })
+        const temporaryToken = this.generateTokenToReLoginWithTwoFactorToken(user.id)
+        this.logger.warn("2FA enabled, redirecting to complete two factor authentication", { userId: user.id })
+        throw new TwoFaAuthRequiredException(temporaryToken)
+    }
 
-        await this.authMemoryRepository.storeRefreshToken(user.id, refreshToken)
+    async completeTwoFactorlogin(input: CompleteTwoFactorDto): Promise<{ 
+        accessToken: string, 
+        refreshToken: string 
+    }> {
+        const { twoFaToken, backupCode, temporaryToken } = input
 
-        this.logger.log("Login successful", { userId: user.id, typeAuthentication })
+        let payload: JwtPayload
 
-        return { accessToken, refreshToken }
+        try{
+            payload = this.jwtService.verify(temporaryToken, this.environmentService.get("JWT_PUBLIC_KEY")) as JwtPayload
+            
+            if(payload.purpose !== "2fa-verification") {
+                this.logger.warn("Invalid temporary token", { userId: payload.sub })
+                throw new UnauthorizedException('Invalid token purpose')
+            }
+        }catch(err) {
+            this.logger.warn("Invalid or expired temporary token")
+            throw new UnauthorizedException('Invalid or expired temporary token')
+        }
+
+        const userId = payload.sub
+
+        const user = await this.authRepository.findUserById(userId)
+        if(!user) {
+            this.logger.warn("User not found", { userId })
+            throw new UnauthorizedException('User not found')
+        }
+
+        let typeAuthentication: AuthenticationType
+
+        let isSecondFactorValid = false
+        if(backupCode) {
+            isSecondFactorValid = await this.validateAndInvalidBackupCode(user, backupCode)
+            if(!isSecondFactorValid) {
+                this.logger.warn("Invalid backup code", { userId: user.id })
+                throw new UnauthorizedException('Invalid backup code')
+            }
+            typeAuthentication = "backupCode"
+        } else if(twoFaToken) {
+            isSecondFactorValid = await this.verifyTwoFa(user, twoFaToken)
+            if(!isSecondFactorValid) {
+                this.logger.warn("Invalid two factor authentication token", { userId: user.id })
+                throw new UnauthorizedException('Invalid two factor authentication token')
+            }
+            typeAuthentication = "twoFaToken"
+        } else {
+            throw new UnauthorizedException('Two factor authentication token or backup code is required')
+        }
+
+        return this.grantFinalTokens(user.id, user.email, typeAuthentication)
     }
 
     async refreshTokens(userId: string, refreshToken: string): Promise<{ 
@@ -309,7 +336,8 @@ export class AuthService {
         const payload = {
             sub: user.id,
             email: user.email,
-            jti: crypto.randomUUID()
+            jti: crypto.randomUUID(),
+            purpose: "access"
         }
         
         const token = this.jwtService.sign(payload, this.environmentService.get("JWT_PRIVATE_KEY"), { 
@@ -324,7 +352,8 @@ export class AuthService {
         
         const payload = {
             sub: user.id,
-            jti: crypto.randomUUID()
+            jti: crypto.randomUUID(),
+            purpose: "refresh"
         }
         
         const token = this.jwtService.sign(payload, this.environmentService.get("JWT_PRIVATE_KEY"), { 
@@ -352,5 +381,38 @@ export class AuthService {
             this.logger.warn("Invalid refresh token", { userId })
             throw new UnauthorizedException("Invalid refresh token")
         }
+    }
+
+    private generateTokenToReLoginWithTwoFactorToken(userId: string) {
+        this.logger.debug("Generating token to re-login with two factor token")
+
+        const payload = {
+            sub: userId,
+            purpose: "2fa-verification"
+        }
+
+        const token = this.jwtService.sign(
+            payload, this.environmentService.get("JWT_PRIVATE_KEY"), { expiresIn: "3m", algorithm: "RS256" }
+        )
+
+        return token
+    }
+
+    private async grantFinalTokens(userId: string, email: string, typeAuthentication: AuthenticationType):  Promise<{
+        accessToken: string,
+        refreshToken: string
+    }> {
+        const accessToken = this.generateAccessToken({
+            id: userId,
+            email: email,
+        })
+
+        const refreshToken = this.generateRefreshToken({ id: userId })
+
+        await this.authMemoryRepository.storeRefreshToken(userId, refreshToken)
+
+        this.logger.log("Login successful", { userId: userId, typeAuthentication })
+
+        return { accessToken, refreshToken }
     }
 }
