@@ -8,7 +8,7 @@ import { EnvironmentService } from "src/config/environment/environment.service";
 import { ApiBadRequestResponse, ApiBody, ApiCookieAuth, ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiTags, ApiUnauthorizedResponse } from "@nestjs/swagger";
 import { TokensResponseDto } from "./dto/tokens-response.dto";
 import { VerifyJwtGuard } from "./guards/verify-jwt.guard";
-
+ 
 @ApiTags("Auth")
 @Controller("auth")
 export class AuthController {
