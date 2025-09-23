@@ -52,17 +52,11 @@ This API includes a comprehensive set of features for modern authentication:
    cd twoFa
    ```
 2. Create a `.env` file at the project root (example below)
-3. Start the services with Docker
+3. Start the services with Docker (migrations run automatically via the `migrate` service)
    ```bash
    docker compose up -d --build
    ```
-4. Run database migrations inside the app container
-   ```bash
-   docker compose exec app npx prisma migrate deploy
-   # Dev alternative (push schema without creating migration files):
-   docker compose exec app npx prisma db push
-   ```
-5. The API will be available at `http://localhost:<PORT>` (see the `PORT` variable in `.env`)
+4. The API will be available at `http://localhost:<PORT>` (see the `PORT` variable in `.env`)
 
 ### .env file (example)
 ```env
@@ -87,13 +81,19 @@ TWOFA_APP_NAME=TwoFA Demo
 # openssl rand -base64 32 | head -c 32
 # or: openssl rand -hex 32
 ENCRYPTION_KEY=your-32-byte-key-here
+
+# Redis (uses the `redis` service from docker-compose)
+REDIS_HOST=redis
+REDIS_PORT=6379
+REDIS_PASSWORD=docker
 ```
 
 ### Notes
-- `docker-compose.yml` brings up two services: `app` (NestJS) and `pgsql` (PostgreSQL).
+- `docker-compose.yml` brings up `app` (NestJS), `pgsql` (PostgreSQL), `redis`, and `migrate`.
+- The `migrate` service applies database migrations automatically before the `app` starts.
 - `app` ports are defined by `PORT` in `.env` and mapped to the host.
 - The database container exposes `5435` on the host for convenience, but the app connects to `pgsql:5432` inside the Docker network.
-- The image bundles `prisma/schema.prisma`, so Prisma CLI commands (migrate/db push) run inside the container without extra flags.
+ - The app connects to Redis via `redis:6379` with password `docker` (healthcheck authenticates accordingly).
 
 ## Running Tests
 

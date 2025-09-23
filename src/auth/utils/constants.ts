@@ -1,0 +1,2 @@
+
+export const REFRESH_TOKEN_EXPIRATION_TIME = "7d"
