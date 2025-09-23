@@ -50,7 +50,7 @@ export class AuthController {
     @ApiCookieAuth("refresh_token")
     async refrehToken(@Req() request: Request, @Res({ passthrough: true }) response: Response) {
         const { sub } = request.jwtPayload
-        const { accessToken, refreshToken } = await this.authService.refreshTokens(sub)
+        const { accessToken, refreshToken } = await this.authService.refreshTokens(sub, request.refreshToken)
         this.setRefreshToken(response, refreshToken)
         return { accessToken: accessToken }
     }
@@ -95,6 +95,16 @@ export class AuthController {
     async disableTwoFa(@Req() request: Request) {
         const { sub } = request.jwtPayload
         await this.authService.disableTwoFa(sub)
+    }
+
+    @Post("logout")
+    @HttpCode(200)
+    @UseGuards(VerifyJwtGuard)
+    @ApiOperation({ summary: "Logout a user" })
+    @ApiOkResponse({ description: "Logout successful" })
+    async logout(@Req() request: Request) {
+        const { exp, jti, sub } = request.jwtPayload
+        await this.authService.logout(sub, jti, exp)
     }
 
     private setRefreshToken(response: Response,refreshToken: string) {
