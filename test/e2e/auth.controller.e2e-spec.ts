@@ -234,7 +234,6 @@ describe("AuthController (e2e)", () => {
             })
         })
 
-
         describe("POST /confirm-two-fa", () => {
 
             it("should confirm two factor authentication", async () => {
@@ -309,6 +308,92 @@ describe("AuthController (e2e)", () => {
             })
         })
 
+        describe("POST /refresh", () => {
+
+            it("should refresh token if the refresh token is valid", async () => {
+
+                const responseLogin = await request(setupContext.httpServer)
+                    .post("/auth/login")
+                    .send({
+                        email: seededDatabase.user.email,
+                        password: "password123"
+                    })
+
+                const refreshToken = setupContext.authServiceMockTest.getRefreshTokenFromHeaders(responseLogin)
+
+                const response = await request(setupContext.httpServer)
+                    .post("/auth/refresh")
+                    .set("Cookie", `refresh_token=${refreshToken}`)
+                    .expect(HttpStatus.OK)
+
+                const rawSetCookie = response.headers['set-cookie']
+                expect(rawSetCookie).toBeDefined()
+                const setCookies = Array.isArray(rawSetCookie) ? rawSetCookie : [rawSetCookie as string]
+
+                const refreshCookie = setCookies.find((c: string) => c.startsWith('refresh_token='))
+                expect(refreshCookie).toBeDefined()
+
+                const [, cookieValue] = (refreshCookie as string).split('refresh_token=')
+
+                expect(response.body.accessToken).toBeDefined()
+                expect(setCookies).toBeDefined()
+                expect(Array.isArray(setCookies)).toBe(true)
+                expect(cookieValue).toBeTruthy()
+            })
+
+            it("should return a unauthorized error if the refresh token is invalid", async () => {
+                
+                const loginDto: LoginDto = {
+                    email: seededDatabase.user.email,
+                    password: "password123"
+                }
+
+                const responseFirstLogin = await request(setupContext.httpServer)
+                    .post("/auth/login")
+                    .send(loginDto)
+                    .expect(HttpStatus.OK)
+
+                const refreshTokenFirstLogin = setupContext.authServiceMockTest.getRefreshTokenFromHeaders(responseFirstLogin)
+
+                await request(setupContext.httpServer)
+                    .post("/auth/refresh")
+                    .set("Cookie", `refresh_token=${refreshTokenFirstLogin}`)
+                    .expect(HttpStatus.OK)
+
+                await request(setupContext.httpServer)
+                    .post("/auth/refresh")
+                    .set("Cookie", `refresh_token=${refreshTokenFirstLogin}`)
+                    .expect(HttpStatus.UNAUTHORIZED)
+            })
+        })
+
+        describe("POST /logout", () => {
+
+            it("should logout a user", async () => {
+
+                const loginDto: LoginDto = {
+                    email: seededDatabase.user.email,
+                    password: "password123"
+                }
+
+                const responseLogin = await request(setupContext.httpServer)
+                    .post("/auth/login")
+                    .send(loginDto)
+                    .expect(HttpStatus.OK)
+
+                const accessToken = responseLogin.body.accessToken
+
+                await request(setupContext.httpServer)
+                    .post("/auth/logout")
+                    .set("Authorization", `Bearer ${accessToken}`)
+                    .expect(HttpStatus.OK)
+
+                await request(setupContext.httpServer)
+                    .post("/auth/enable-two-fa")
+                    .set("Authorization", `Bearer ${accessToken}`)
+                    .expect(HttpStatus.UNAUTHORIZED)
+            })
+        })
     })
 
 })
