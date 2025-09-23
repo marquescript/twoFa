@@ -25,6 +25,10 @@ export class VerifyJwtGuard implements CanActivate {
         try {            
             const payload = this.jwtService.verify(token, this.environmentService.get("JWT_PUBLIC_KEY")) as JwtPayload
 
+            if(payload.purpose !== "access") {
+                throw new UnauthorizedException("Token invalid")
+            }
+
             const jti = payload.jti
             if(jti) {
                 const isRevoked = await this.authMemoryRepository.isAccessTokenRevoked(jti)

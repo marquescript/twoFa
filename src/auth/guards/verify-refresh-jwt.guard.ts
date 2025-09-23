@@ -24,6 +24,10 @@ export class VerifyRefreshJwtGuard implements CanActivate {
         try {
             const payload = this.jwtService.verify(token, this.environmentService.get("JWT_PUBLIC_KEY")) as JwtPayload
 
+            if(payload.purpose !== "refresh") {
+                throw new UnauthorizedException("Refresh token invalid")
+            }
+
             request.jwtPayload = payload
             request.refreshToken = token
         }catch(err) {

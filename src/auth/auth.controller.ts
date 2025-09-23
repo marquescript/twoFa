@@ -3,11 +3,11 @@ import { Request, Response } from "express";
 import { VerifyRefreshJwtGuard } from "./guards/verify-refresh-jwt.guard";
 import { AuthService } from "./auth.service";
 import { CreateUserDto } from "./dto/create-user.dto";
-import { LoginDto } from "./dto/login.dto";
 import { EnvironmentService } from "src/config/environment/environment.service";
 import { ApiBadRequestResponse, ApiBody, ApiCookieAuth, ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiTags, ApiUnauthorizedResponse } from "@nestjs/swagger";
 import { TokensResponseDto } from "./dto/tokens-response.dto";
 import { VerifyJwtGuard } from "./guards/verify-jwt.guard";
+import { CompleteTwoFactorDto, InitialLoginDto } from "./dto/login.dto";
  
 @ApiTags("Auth")
 @Controller("auth")
@@ -35,9 +35,21 @@ export class AuthController {
     @ApiOperation({ summary: "Authenticate a user" })
     @ApiOkResponse({ description: "Login successful", type: TokensResponseDto })
     @ApiUnauthorizedResponse({ description: "Invalid credentials" })
-    @ApiBody({ type: LoginDto })
-    async login(@Body() request: LoginDto, @Res({ passthrough: true }) response: Response) {
-        const { accessToken, refreshToken } = await this.authService.login(request)
+    @ApiBody({ type: InitialLoginDto })
+    async login(@Body() request: InitialLoginDto, @Res({ passthrough: true }) response: Response) {
+        const { accessToken, refreshToken } = await this.authService.initiateLogin(request)
+        this.setRefreshToken(response, refreshToken)
+        return { accessToken }
+    }
+
+    @Post("/login/two-factor")
+    @HttpCode(200)
+    @ApiOperation({ summary: "Complete two factor authentication" })
+    @ApiOkResponse({ description: "Two factor authentication completed", type: TokensResponseDto })
+    @ApiUnauthorizedResponse({ description: "Invalid credentials" })
+    @ApiBody({ type: CompleteTwoFactorDto })
+    async completeTwoFactorLogin(@Body() request: CompleteTwoFactorDto, @Res({ passthrough: true }) response: Response) {
+        const { accessToken, refreshToken } = await this.authService.completeTwoFactorlogin(request)
         this.setRefreshToken(response, refreshToken)
         return { accessToken }
     }
