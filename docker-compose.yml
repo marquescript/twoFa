@@ -9,6 +9,10 @@ services:
     depends_on:
       pgsql:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
   pgsql:
     image: bitnami/postgresql:latest
@@ -26,6 +30,31 @@ services:
       timeout: 5s
       retries: 5
 
+  redis:
+    image: redis
+    container_name: two-fa-redis
+    command: ["redis-server", "--requirepass", "docker"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a docker ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  migrate:
+    build:
+      context: .
+      target: builder
+    env_file:
+      - .env
+    depends_on:
+      pgsql:
+        condition: service_healthy
+    command: ["sh", "-c", "npx prisma migrate deploy"]
 
 volumes:
   pgsql_data:
+  redis-data:
