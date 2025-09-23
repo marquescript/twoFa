@@ -26,7 +26,7 @@ export class AuthServiceMockTest {
     }
 
     async generateAccessTokenTest(id: string, email: string, secret: string) {
-        const accessToken = jwt.sign({ sub: id, email: email }, secret, { 
+        const accessToken = jwt.sign({ sub: id, email: email, purpose: "access" }, secret, { 
             expiresIn: "2m",
             algorithm: 'RS256'
         })
@@ -35,12 +35,21 @@ export class AuthServiceMockTest {
     }
 
     async generateRefreshTokenTest(id: string, secret: string) {
-        const refreshToken = jwt.sign({ sub: id, jti: crypto.randomUUID() }, secret, { 
+        const refreshToken = jwt.sign({ sub: id, jti: crypto.randomUUID(), purpose: "refresh" }, secret, { 
             expiresIn: "5m",
             algorithm: 'RS256'
         })
 
         return refreshToken
+    }
+
+    async generateTemporaryTokenTest(id: string, secret: string) {
+        const temporaryToken = jwt.sign({ sub: id, purpose: "2fa-verification" }, secret, { 
+            expiresIn: "3m",
+            algorithm: 'RS256'
+        })
+
+        return temporaryToken
     }
 
     generateValidTwoFaToken(secret: string): string {

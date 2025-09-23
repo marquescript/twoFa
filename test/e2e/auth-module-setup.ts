@@ -2,6 +2,7 @@ import { INestApplication } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 import * as cookieParser from "cookie-parser";
 import { AuthModule } from "src/auth/auth.module";
+import { LoggerService } from "src/config/logger/logger.service";
 import { PrismaService } from "src/config/database/prisma.service";
 import * as bcrypt from "bcryptjs"
 import { AuthServiceMockTest } from "./auth-service-mock-test";
@@ -19,9 +20,21 @@ export class AuthModuleSetup {
         const moduleFixture: TestingModule = await Test.createTestingModule({
             imports: [AuthModule],
             providers: [AuthServiceMockTest]
-        }).compile()
+        })
+        .overrideProvider(LoggerService)
+        .useValue({
+            setContext: () => {},
+            log: () => {},
+            warn: () => {},
+            error: () => {},
+            debug: () => {},
+        })
+        .compile()
 
-        this.app = moduleFixture.createNestApplication()
+        this.app = moduleFixture.createNestApplication({
+            logger: false,
+            bufferLogs: false
+        })
 
         this.app.use(cookieParser())
 
